@@ -1,6 +1,6 @@
 *.pyc
 .DS_Store
 *.log
-#.pydevproject
-#.project
-#.gitignore
+.pydevproject
+.project
+.gitignore

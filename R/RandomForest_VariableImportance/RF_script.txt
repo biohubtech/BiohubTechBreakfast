@@ -1,0 +1,162 @@
+[dwood@mpxws03 Demo]
+
+R version 3.1.2 (2014-10-31) -- Pumpkin Helmet
+Copyright (C) 2014 The R Foundation for Statistical Computing
+Platform: x86_64-redhat-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+[Previously saved workspace restored]
+
+##
+# Repair missing data with randomForest function rfImpute
+##
+
+> library(randomForest)
+randomForest 4.6-7
+Type rfNews() to see new features/changes/bug fixes.
+> data = read.csv(readingData.csv, sep=t)
+> data[1:5,]
+  native age shoeSize     rand1     rand2     rand3      rand4     rand5
+1    yes   5 24.83189 0.9245903 0.7676486 0.6053039 0.60439909 0.1550521
+2    yes  NA 25.95238 0.4240163 0.7269630 0.5538989 0.03198381 0.3345339
+3     no  11 30.42170 0.7818014 0.7952848 0.8712672 0.66090332 0.4291085
+4    yes   7 28.66450 0.4600000 0.5203060        NA 0.94187624 0.7287417
+5    yes  NA 31.88207        NA 0.5425519 0.2716349 0.42992143 0.5769031
+     score
+1 32.29385
+2 36.63105
+3 49.60593
+4 40.28456
+5 55.46085
+> repairedData <- rfImpute(score ~ ., data)
+     |      Out-of-bag   |
+Tree |      MSE  %Var(y) |
+ 300 |    5.045     6.97 |
+     |      Out-of-bag   |
+Tree |      MSE  %Var(y) |
+ 300 |    4.189     5.78 |
+     |      Out-of-bag   |
+Tree |      MSE  %Var(y) |
+ 300 |     4.47     6.17 |
+     |      Out-of-bag   |
+Tree |      MSE  %Var(y) |
+ 300 |    4.447     6.14 |
+     |      Out-of-bag   |
+Tree |      MSE  %Var(y) |
+ 300 |    4.187     5.78 |
+> repairedData[1:5,]
+     score native       age shoeSize     rand1     rand2     rand3      rand4
+1 32.29385    yes  5.000000 24.83189 0.9245903 0.7676486 0.6053039 0.60439909
+2 36.63105    yes  6.889447 25.95238 0.4240163 0.7269630 0.5538989 0.03198381
+3 49.60593     no 11.000000 30.42170 0.7818014 0.7952848 0.8712672 0.66090332
+4 40.28456    yes  7.000000 28.66450 0.4600000 0.5203060 0.5293489 0.94187624
+5 55.46085    yes 10.241926 31.88207 0.5398990 0.5425519 0.2716349 0.42992143
+      rand5
+1 0.1550521
+2 0.3345339
+3 0.4291085
+4 0.7287417
+5 0.5769031
+
+##
+# Identify most important variables
+##
+
+> rfModel <- randomForest(score ~ ., data=repairedData, importance=T)
+> rfModel
+
+Call:
+ randomForest(formula = score ~ ., data = repairedData, importance = T) 
+               Type of random forest: regression
+                     Number of trees: 500
+No. of variables tried at each split: 2
+
+          Mean of squared residuals: 4.496196
+                    % Var explained: 93.79
+> rfModel
+              %IncMSE IncNodePurity
+native   13.244472185     1517.6777
+age      53.431914299     5760.1039
+shoeSize 29.413446783     4566.1390
+rand1    -0.302932385      496.0248
+rand2     0.216712345      497.3251
+rand3     0.006773498      464.6585
+rand4     0.028147888      461.5914
+rand5     0.095462541      451.0713
+
+##
+# We can do better than this
+# How about conditional variable importance?
+##
+
+> library(party)
+> cfModel <- cforest(score ~ ., data=repairedData, control=cforest_unbiased())
+> cfModel
+
+Random Forest using Conditional Inference Trees
+
+Number of trees:  500 
+
+Response:  score 
+Inputs:  native, age, shoeSize, rand1, rand2, rand3, rand4, rand5 
+Number of observations:  200 
+
+#
+# Regular variable importance
+#
+
+> varimp(cfModel)
+     native         age    shoeSize       rand1       rand2       rand3 
+12.89182913 77.35757170 17.74486082 -0.03604297  0.03218670  0.01908724 
+      rand4       rand5 
+ 0.06271321 -0.01742374 
+
+#
+# Conditional variable importance
+#
+
+> varimp(cfModel, conditional=T)
+      native          age     shoeSize        rand1        rand2        rand3 
+11.036367599 48.853709730  1.587260522  0.010270883 -0.016076785  0.013773455 
+       rand4        rand5 
+ 0.051039291  0.001558311 
+
+#
+# Finally we can build a nicely interpretable linear regression model
+#
+
+> reducedData <- repairedData[c(score, native, age)]
+> reducedData[native] <- (repairedData[native] == yes) * 1
+> reducedData[1:5,]
+     score native       age
+1 32.29385      1  5.000000
+2 36.63105      1  6.923655
+3 49.60593      0 11.000000
+4 40.28456      1  7.000000
+5 55.46085      1 10.238361
+
+> linearModel <- glm(score ~ ., data=reducedData)
+> linearModel
+
+Call:  glm(formula = score ~ ., data = reducedData)
+
+Coefficients:
+(Intercept)       native          age  
+      5.625        5.991        4.045  
+
+Degrees of Freedom: 199 Total (i.e. Null);  197 Residual
+Null Deviance:   14490 
+Residual Deviance: 76.61 AIC: 383.7
